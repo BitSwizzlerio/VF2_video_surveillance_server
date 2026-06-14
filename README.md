@@ -2,6 +2,14 @@ This is a rather crude project I only mentioned in passing because I’m rather 
 
 I use a separate “cam” shell script for each camera assigned with the proper IP maintained by my router. These scripts use [FFMPEG](https://ffmpeg.org/) to encode the stream into something more manageable. You will need to install FFMPEG on your VisionFive2. I don’t recall the steps but I don’t remember it being complicated either. Should be rather easy. A separate “pave” shell script is used to delete any video that is approaching a week old to make room for new video. It also compresses day old video. Like I said, rather crude, but effective for my needs.
 
+Getting scripts:
+```
+cd /root
+wget https://raw.githubusercontent.com/BitSwizzlerio/VF2_video_surveillance_server/main/cam1.sh
+wget https://raw.githubusercontent.com/BitSwizzlerio/VF2_video_surveillance_server/main/pave.sh
+chmod +x cam1.sh pave.sh
+```
+
 To activate the scripts, I use crontab -e and add the following to mount the drive and execute scripts:
 ```
 @reboot sleep 10 && mount /dev/nvme0n1p1 /mnt/nvme
