@@ -44,4 +44,7 @@ root@starfive:~# tree -d /mnt/
 
 Like I said, rather crude.
 
+I added the script gen.sh that one can drop into the /mnt/nvme you'll need to create first using ```mkdir /mnt/nvme```
+. just drop it into nvme and make it executable using ```chmod +x gen.sh``` .
+
 The ESP32-CAMs I’m using aren’t great. They get an average of a few frames a second on the higher resolutions. But, I don’t see why this wouldn’t work with any feed from any camera. 
