@@ -49,6 +49,8 @@ so install that on the VisionFive 2 first.
 | `cleanup.sh`        | Daily: delete `.tar.gz` archives older than `RETENTION_DAYS`.     |
 | `gen.sh`            | Pre-create the cam/day/hour folder tree.                          |
 | `crontab.example`   | Ready-to-paste cron schedule.                                     |
+| `api.py`            | Optional read-only HTTP API for browsing/streaming footage.       |
+| `vf2-api.service.example` | systemd unit to run `api.py` on boot.                       |
 
 ## Setup
 
@@ -150,6 +152,54 @@ Pull files off the device with `scp`, e.g.:
 ```bash
 scp root@<visionfive-ip>:/mnt/nvme/cam1/Fri/13/cam1_Fri_13.tar.gz .
 ```
+
+## HTTP API (optional)
+
+[`api.py`](api.py) is a small **read-only** HTTP service (Python 3 standard
+library only — no extra packages) that lets a client browse and stream footage
+over the LAN instead of using `scp`. It reads `cams.conf` and `config.sh`, scans
+the storage tree, and transparently extracts segments from the per-hour
+`.tar.gz` archives on demand, so callers always receive plain `.mp4` bytes.
+
+Run it directly:
+
+```bash
+python3 /root/api.py        # serves on 0.0.0.0:8080 by default
+```
+
+or install it as a service so it starts on boot:
+
+```bash
+sudo cp vf2-api.service.example /etc/systemd/system/vf2-api.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now vf2-api
+```
+
+### Endpoints
+
+| Method & path | Returns |
+| ------------- | ------- |
+| `GET /api/health` | `{"status":"ok"}` |
+| `GET /api/cameras` | `[{"id","name","ip"}, ...]` |
+| `GET /api/cameras/{id}/segments?day=YYYY-MM-DD` | `[{"start","durationSeconds","source","resourceId"}, ...]` |
+| `GET /api/segments/{resourceId}/stream` | `video/mp4` (supports HTTP `Range` for seeking) |
+
+`source` is `LOOSE_MP4` for recent footage or `ARCHIVED` for segments still
+inside a `.tar.gz`.
+
+### Configuration (environment variables)
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `VF2_BASE_DIR` | from `config.sh` (`/mnt/nvme`) | storage root |
+| `VF2_CAMS_CONF` | `cams.conf` beside the script | camera list |
+| `VF2_DURATION` | from `config.sh` (`900`) | nominal segment length |
+| `VF2_HOST` / `VF2_PORT` | `0.0.0.0` / `8080` | bind address |
+| `VF2_CACHE_DIR` | `<tmp>/vf2_api_cache` | archive extraction cache |
+| `VF2_TOKEN` | _(unset)_ | if set, require `Authorization: Bearer <token>` |
+
+> The API is **read-only** and intended for a trusted LAN/VPN. If it must be
+> reachable more widely, set `VF2_TOKEN` and/or front it with a reverse proxy.
 
 ## Notes
 
