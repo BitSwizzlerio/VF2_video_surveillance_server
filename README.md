@@ -161,19 +161,65 @@ over the LAN instead of using `scp`. It reads `cams.conf` and `config.sh`, scans
 the storage tree, and transparently extracts segments from the per-hour
 `.tar.gz` archives on demand, so callers always receive plain `.mp4` bytes.
 
-Run it directly:
+### Deploying the API
 
-```bash
-python3 /root/api.py        # serves on 0.0.0.0:8080 by default
-```
+1. **Get the files onto the VF2.** `api.py` and `vf2-api.service.example` must
+   sit in the **same directory as `config.sh` and `cams.conf`** (the script
+   reads both from next to itself). Fetch them like the other scripts:
 
-or install it as a service so it starts on boot:
+   ```bash
+   cd /root
+   wget https://raw.githubusercontent.com/BitSwizzlerio/VF2_video_surveillance_server/main/api.py
+   wget https://raw.githubusercontent.com/BitSwizzlerio/VF2_video_surveillance_server/main/vf2-api.service.example
+   ```
 
-```bash
-sudo cp vf2-api.service.example /etc/systemd/system/vf2-api.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now vf2-api
-```
+   (Or copy them from another machine: `scp api.py vf2-api.service.example root@<vf2-ip>:/root/`.)
+
+2. **Confirm Python 3 is present** (stock Debian has it; no `pip` needed):
+
+   ```bash
+   python3 --version
+   ```
+
+3. **Test run in the foreground:**
+
+   ```bash
+   python3 /root/api.py        # serves on 0.0.0.0:8080 by default
+   ```
+
+   You should see:
+
+   ```text
+   VF2 API serving /mnt/nvme on http://0.0.0.0:8080  (cameras: /root/cams.conf, token: off)
+   ```
+
+   From another session (or your client machine), verify:
+
+   ```bash
+   curl http://<vf2-ip>:8080/api/health
+   curl http://<vf2-ip>:8080/api/cameras
+   curl "http://<vf2-ip>:8080/api/cameras/cam1/segments?day=$(date +%F)"
+   ```
+
+   Press `Ctrl+C` to stop the test.
+
+4. **Install as a service** so it starts on boot and restarts on failure:
+
+   ```bash
+   sudo cp /root/vf2-api.service.example /etc/systemd/system/vf2-api.service
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now vf2-api
+   ```
+
+   Check it with `systemctl status vf2-api` and `journalctl -u vf2-api -f`. If
+   your scripts don't live in `/root`, edit `WorkingDirectory`/`ExecStart` in
+   the unit to match.
+
+5. **Open the port** if you run a firewall, e.g. `sudo ufw allow 8080/tcp`, and
+   reserve a static DHCP lease for the VF2 so the client's URL stays valid.
+
+6. **(Optional) Require a token.** For anything beyond a trusted LAN, set
+   `VF2_TOKEN` (see below) and restart the service.
 
 ### Endpoints
 
