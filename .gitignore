@@ -7,3 +7,8 @@
 
 # Local camera config with private IPs (copy cams.conf.example to cams.conf).
 cams.conf
+
+# Python bytecode cache.
+__pycache__/
+*.py[cod]
+*.pyo
