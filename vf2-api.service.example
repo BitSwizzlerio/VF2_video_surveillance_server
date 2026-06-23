@@ -1,0 +1,30 @@
+# Read-only footage API for the VF2 surveillance server.
+#
+# Install:
+#   sudo cp vf2-api.service.example /etc/systemd/system/vf2-api.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now vf2-api
+#
+# Adjust ExecStart/WorkingDirectory if the scripts do not live in /root.
+
+[Unit]
+Description=VF2 read-only footage API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root
+ExecStart=/usr/bin/python3 /root/api.py
+Restart=on-failure
+RestartSec=5
+
+# Bind address / port (defaults shown).
+Environment=VF2_HOST=0.0.0.0
+Environment=VF2_PORT=8080
+
+# Optional: require "Authorization: Bearer <token>" on every request.
+# Environment=VF2_TOKEN=change-me
+
+[Install]
+WantedBy=multi-user.target
