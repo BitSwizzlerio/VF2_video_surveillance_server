@@ -12,7 +12,7 @@ MJPEG stream should work. Recording is done with [FFmpeg](https://ffmpeg.org/),
 so install that on the VisionFive 2 first.
 
 > Based on the original crude-but-reliable setup, refactored so the camera IPs
-> live in a config file instead of being hard-coded into four near-identical
+> live in a config file instead of being hard-coded into several near-identical
 > scripts.
 
 ## What changed in this version
