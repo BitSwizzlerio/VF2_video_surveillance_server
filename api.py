@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import tarfile
 import tempfile
 import threading
@@ -129,6 +130,48 @@ def _tar_mp4_members(tar_path: str):
         return
 
 
+def _index_path(archive_path: str) -> str:
+    return archive_path + ".idx"
+
+
+def _read_index(archive_path: str):
+    """Return cached mp4 basenames from the sidecar .idx, or None if stale/missing.
+
+    Reading a per-hour .tar.gz of MJPEG footage means decompressing hundreds of
+    megabytes just to learn the filenames, which is far too slow on the VF2. The
+    recorder (pave.sh) writes a tiny "<archive>.idx" listing alongside each
+    archive; we read that instead. ``api.py --reindex`` backfills existing ones.
+    """
+    idx = _index_path(archive_path)
+    try:
+        if os.path.isfile(idx) and os.path.getmtime(idx) >= os.path.getmtime(archive_path):
+            with open(idx, "r", encoding="utf-8", errors="replace") as f:
+                return [line.strip() for line in f if line.strip()]
+    except OSError:
+        pass
+    return None
+
+
+def _build_index(archive_path: str):
+    """Decompress an archive once to list its mp4s and cache the result in .idx."""
+    names = list(_tar_mp4_members(archive_path))
+    try:
+        with open(_index_path(archive_path), "w", encoding="utf-8") as f:
+            for name in names:
+                f.write(name + "\n")
+    except OSError:
+        pass
+    return names
+
+
+def _archive_mp4_names(archive_path: str):
+    """mp4 basenames in an archive, preferring the fast .idx sidecar."""
+    names = _read_index(archive_path)
+    if names is None:
+        names = _build_index(archive_path)
+    return names
+
+
 def list_segments(cam_id: str, day: str):
     """List segments for a camera on a calendar day (YYYY-MM-DD)."""
     try:
@@ -156,7 +199,7 @@ def list_segments(cam_id: str, day: str):
                 if start and start.date() == target:
                     segments.append(_segment(cam_id, dow, hour, name, start, "LOOSE_MP4"))
             elif name.endswith(".tar.gz") and os.path.isfile(full):
-                for member in _tar_mp4_members(full):
+                for member in _archive_mp4_names(full):
                     start = _parse_start(member)
                     if start and start.date() == target:
                         segments.append(_segment(cam_id, dow, hour, member, start, "ARCHIVED"))
@@ -356,7 +399,33 @@ class Handler(BaseHTTPRequestHandler):
         print("%s - %s" % (self.address_string(), fmt % args))
 
 
+def reindex():
+    """Backfill a .idx sidecar for every archive that lacks an up-to-date one.
+
+    Run this once on the VF2 after deploying (``python3 api.py --reindex``) so the
+    first segment listing for older footage is instant instead of decompressing
+    gigabytes of archives over HTTP.
+    """
+    built = 0
+    skipped = 0
+    for root, _dirs, files in os.walk(BASE_DIR):
+        for name in files:
+            if not name.endswith(".tar.gz"):
+                continue
+            archive_path = os.path.join(root, name)
+            if _read_index(archive_path) is not None:
+                skipped += 1
+                continue
+            _build_index(archive_path)
+            built += 1
+            print(f"indexed {archive_path}")
+    print(f"Reindex complete: {built} built, {skipped} already current")
+
+
 def main():
+    if "--reindex" in sys.argv:
+        reindex()
+        return
     os.makedirs(CACHE_DIR, exist_ok=True)
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"VF2 API serving {BASE_DIR} on http://{HOST}:{PORT}  "

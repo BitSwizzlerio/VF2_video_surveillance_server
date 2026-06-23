@@ -27,6 +27,9 @@ while read -r cam _ip; do
       echo "Zipping $dir"
       # Only delete the MP4s if the archive was created successfully.
       if nice -n 15 tar -czf "$tarfile" -C "$dir" --exclude='*.gz' --ignore-failed-read . ; then
+        # Write a lightweight index of the archived mp4 names so the HTTP API
+        # can list segments without decompressing the whole tarball.
+        ls -1 "$dir"/*.mp4 2>/dev/null | xargs -r -n1 basename > "$tarfile.idx"
         rm -f "$dir"/*.mp4
         echo "→ Done $dir"
       else

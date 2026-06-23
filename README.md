@@ -203,7 +203,17 @@ the storage tree, and transparently extracts segments from the per-hour
 
    Press `Ctrl+C` to stop the test.
 
-4. **Install as a service** so it starts on boot and restarts on failure:
+4. **Index existing footage (one-time).** Listing archived segments needs a tiny
+   `<archive>.idx` sidecar next to each `.tar.gz`; without it the API would have
+   to decompress whole archives just to read filenames, which is far too slow on
+   the VF2. New archives get an `.idx` automatically (see `pave.sh`); backfill
+   the existing ones once:
+
+   ```bash
+   python3 /root/api.py --reindex
+   ```
+
+5. **Install as a service** so it starts on boot and restarts on failure:
 
    ```bash
    sudo cp /root/vf2-api.service.example /etc/systemd/system/vf2-api.service
@@ -215,10 +225,10 @@ the storage tree, and transparently extracts segments from the per-hour
    your scripts don't live in `/root`, edit `WorkingDirectory`/`ExecStart` in
    the unit to match.
 
-5. **Open the port** if you run a firewall, e.g. `sudo ufw allow 8080/tcp`, and
+6. **Open the port** if you run a firewall, e.g. `sudo ufw allow 8080/tcp`, and
    reserve a static DHCP lease for the VF2 so the client's URL stays valid.
 
-6. **(Optional) Require a token.** For anything beyond a trusted LAN, set
+7. **(Optional) Require a token.** For anything beyond a trusted LAN, set
    `VF2_TOKEN` (see below) and restart the service.
 
 ### Endpoints
