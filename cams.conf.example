@@ -1,0 +1,10 @@
+# Camera definitions: one "name ip" pair per line.
+# Blank lines and lines starting with # are ignored.
+# Names become the folder names under /mnt/nvme (cam1, cam2, ...).
+#
+# Copy this file to cams.conf and replace the IPs with your own cameras:
+#   cp cams.conf.example cams.conf
+cam1 192.168.0.101
+cam2 192.168.0.102
+cam3 192.168.0.103
+cam4 192.168.0.104

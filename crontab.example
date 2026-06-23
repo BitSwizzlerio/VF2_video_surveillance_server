@@ -1,0 +1,20 @@
+# VF2 video surveillance — crontab
+# Install with: crontab -e   (then paste the lines below)
+
+# 1. Mount the NVMe at boot.
+@reboot sleep 10 && mount /dev/nvme0n1p1 /mnt/nvme
+
+# 2. Create the cam/day/hour folder tree (safe to run every boot).
+@reboot sleep 15 && /bin/bash /root/gen.sh
+
+# 3. Start a recorder for every camera in cams.conf. The watchdog does this.
+@reboot sleep 20 && /bin/bash /root/watchdog.sh
+
+# 4. Keep recorders alive — restart any that die, every minute.
+* * * * * /bin/bash /root/watchdog.sh
+
+# 5. Every hour: compress footage older than 3 hours and prep the next hour.
+0 * * * * /bin/bash /root/pave.sh
+
+# 6. Once a day: delete compressed footage older than RETENTION_DAYS (config.sh).
+30 3 * * * /bin/bash /root/cleanup.sh

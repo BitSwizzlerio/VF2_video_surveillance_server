@@ -1,47 +1,40 @@
 #!/bin/bash
+# Compresses footage older than 3 hours into per-hour tarballs and clears the
+# upcoming hour's folder so new recordings have a clean place to land.
+set -euo pipefail
 
-# Get current day of the week
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config.sh"
+
 DAY=$(date +%a)
-YESTERDAY=$(date +%a -d "yesterday")
-
-# Get the current hour in 24-hour format
-CURRENT_HOUR=$(date +%H)
-
-# get the next hour
 NEXT_HOUR=$(date -d '+1 hour' +%H)
+[ "$NEXT_HOUR" = "00" ] && DAY=$(date +%a -d "tomorrow")
 
-# If next hour is 24, reset to 00
-if [ $NEXT_HOUR -eq 00 ]; then
-  DAY=$(date +%a -d "tomorrow")
-fi
+# Clear only the true next hour (safer than touching anything else).
+while read -r cam _ip; do
+  d="$BASE_DIR/$cam/$DAY/$NEXT_HOUR"
+  if [ -d "$d" ]; then
+    rm -f "$d"/*
+    echo "Cleared next: $d"
+  fi
+done < <(list_cams)
 
-# Define directory paths
-CAM1_DIR="/mnt/nvme/cam1/$DAY/$NEXT_HOUR"
-CAM2_DIR="/mnt/nvme/cam2/$DAY/$NEXT_HOUR"
+# Compress folders whose MP4s are older than 3 hours.
+while read -r cam _ip; do
+  while IFS= read -r -d '' f; do
+    dir=$(dirname "$f")
+    tarfile="$dir/${cam}_$(basename "$(dirname "$dir")")_$(basename "$dir").tar.gz"
+    if [ ! -f "$tarfile" ]; then
+      echo "Zipping $dir"
+      # Only delete the MP4s if the archive was created successfully.
+      if nice -n 15 tar -czf "$tarfile" -C "$dir" --exclude='*.gz' --ignore-failed-read . ; then
+        rm -f "$dir"/*.mp4
+        echo "→ Done $dir"
+      else
+        echo "✗ tar failed for $dir, keeping mp4 files" >&2
+        rm -f "$tarfile"
+      fi
+    fi
+  done < <(find "$BASE_DIR/$cam" -name "*.mp4" -mmin +180 -print0 2>/dev/null)
+done < <(list_cams)
 
-# Check if the directories exist
-if [ ! -d "$CAM1_DIR" ] || [ ! -d "$CAM2_DIR" ]; then
-  echo "Error: The directories do not exist. Exiting script."
-  exit 1
-fi
-
-# Delete the contents of the directories
-if ! rm -f "$CAM1_DIR"/* || ! rm -f "$CAM2_DIR"/*; then
-  echo "Error: Failed to delete the contents of the directories. Exiting script."
-  exit 1
-fi
-
-echo "The contents of the directories have been deleted successfully."
-
-# zip current hour of yesterday - saves 100MB+ an hour
-tar -czvf /mnt/nvme/cam1/"$YESTERDAY"/"$CURRENT_HOUR"/cam1_"$YESTERDAY"_"$CURRENT_HOUR".tar.gz -C /mnt/nvme/cam1/"$YESTERDAY"/"$CURRENT_HOUR"/ --exclude='*.gz' . 
-rm -f /mnt/nvme/cam1/"$YESTERDAY"/"$CURRENT_HOUR"/*.mp4
-
-tar -czvf /mnt/nvme/cam2/"$YESTERDAY"/"$CURRENT_HOUR"/cam2_"$YESTERDAY"_"$CURRENT_HOUR".tar.gz -C /mnt/nvme/cam2/"$YESTERDAY"/"$CURRENT_HOUR"/ --exclude='*.gz' . 
-rm -f /mnt/nvme/cam2/"$YESTERDAY"/"$CURRENT_HOUR"/*.mp4
-
-
-
-
-
-echo "The contents of previous day have been zipped successfully."
+echo "Pave finished $(date)"

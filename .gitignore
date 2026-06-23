@@ -1,0 +1,9 @@
+# Recorded footage and archives (never commit video data).
+*.mp4
+*.tar.gz
+
+# Runtime logs.
+*.log
+
+# Local camera config with private IPs (copy cams.conf.example to cams.conf).
+cams.conf
