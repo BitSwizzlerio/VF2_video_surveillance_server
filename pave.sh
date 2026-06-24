@@ -28,8 +28,12 @@ while read -r cam _ip; do
       # Only delete the MP4s if the archive was created successfully.
       if nice -n 15 tar -czf "$tarfile" -C "$dir" --exclude='*.gz' --ignore-failed-read . ; then
         # Write a lightweight index of the archived mp4 names so the HTTP API
-        # can list segments without decompressing the whole tarball.
-        ls -1 "$dir"/*.mp4 2>/dev/null | xargs -r -n1 basename > "$tarfile.idx"
+        # can list segments without decompressing the whole tarball. This is
+        # best-effort: it must never abort the run (set -e) or block the rm
+        # below, otherwise the originals would be stranded next to the archive
+        # forever (the "[ ! -f "$tarfile" ]" guard skips the folder on reruns).
+        # api.py --reindex can rebuild a missing/empty index later.
+        ls -1 "$dir"/*.mp4 2>/dev/null | xargs -r -n1 basename > "$tarfile.idx" || : > "$tarfile.idx"
         rm -f "$dir"/*.mp4
         echo "→ Done $dir"
       else
