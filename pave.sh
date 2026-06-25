@@ -1,15 +1,17 @@
 #!/bin/bash
-# Compresses footage older than 3 hours into per-hour tarballs and clears the
-# upcoming hour's folder so new recordings have a clean place to land.
-set -euo pipefail
-
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config.sh"
+# === Prevent concurrent runs ===
+LOCKFILE="/var/lock/pave.lock"
+exec 9>"$LOCKFILE"
+if ! flock -n 9; then
+    echo "Another pave.sh is already running. Exiting." >&2
+    exit 0
+fi
 
 DAY=$(date +%a)
 NEXT_HOUR=$(date -d '+1 hour' +%H)
 [ "$NEXT_HOUR" = "00" ] && DAY=$(date +%a -d "tomorrow")
 
-# Clear only the true next hour (safer than touching anything else).
+# Clear only the true next hour
 while read -r cam _ip; do
   d="$BASE_DIR/$cam/$DAY/$NEXT_HOUR"
   if [ -d "$d" ]; then
@@ -18,27 +20,28 @@ while read -r cam _ip; do
   fi
 done < <(list_cams)
 
-# Compress folders whose MP4s are older than 3 hours.
+# Compress old footage
 while read -r cam _ip; do
   while IFS= read -r -d '' f; do
     dir=$(dirname "$f")
-    tarfile="$dir/${cam}_$(basename "$(dirname "$dir")")_$(basename "$dir").tar.gz"
+    tarfile="$dir/${cam}_$(basename "$(dirname "$dir")")_$(basename "$dir")".tar.gz
     if [ ! -f "$tarfile" ]; then
       echo "Zipping $dir"
-      # Only delete the MP4s if the archive was created successfully.
-      if nice -n 15 tar -czf "$tarfile" -C "$dir" --exclude='*.gz' --ignore-failed-read . ; then
-        # Write a lightweight index of the archived mp4 names so the HTTP API
-        # can list segments without decompressing the whole tarball. This is
-        # best-effort: it must never abort the run (set -e) or block the rm
-        # below, otherwise the originals would be stranded next to the archive
-        # forever (the "[ ! -f "$tarfile" ]" guard skips the folder on reruns).
-        # api.py --reindex can rebuild a missing/empty index later.
-        ls -1 "$dir"/*.mp4 2>/dev/null | xargs -r -n1 basename > "$tarfile.idx" || : > "$tarfile.idx"
+
+      tmp_tar=$(mktemp --tmpdir=/tmp "pave_${cam}_XXXXXX.tar.gz")
+
+      # Only archive actual .mp4 files, write to temp first
+      if nice -n 5 tar -czf "$tmp_tar" -C "$dir" --null -T <(find "$dir" -maxdepth 1 -name '*.mp4' -print0) --ignore-failed-read 2>/dev/null; then
+        mv -f "$tmp_tar" "$tarfile"
+
+        # Create index (best effort)
+        find "$dir" -maxdepth 1 -name '*.mp4' -printf '%f\n' > "$tarfile.idx" || : > "$tarfile.idx"
+
         rm -f "$dir"/*.mp4
-        echo "→ Done $dir"
+        echo "Done $dir"
       else
-        echo "✗ tar failed for $dir, keeping mp4 files" >&2
-        rm -f "$tarfile"
+        echo "tar failed for $dir, keeping mp4 files" >&2
+        rm -f "$tmp_tar" "$tarfile"
       fi
     fi
   done < <(find "$BASE_DIR/$cam" -name "*.mp4" -mmin +180 -print0 2>/dev/null)
