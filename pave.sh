@@ -1,5 +1,10 @@
 #!/bin/bash
 # === Prevent concurrent runs ===
+set -euo pipefail
+
+# === Source config.sh (this defines list_cams and BASE_DIR etc.) ===
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/config.sh"
+
 LOCKFILE="/var/lock/pave.lock"
 exec 9>"$LOCKFILE"
 if ! flock -n 9; then
